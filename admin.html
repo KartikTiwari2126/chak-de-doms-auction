@@ -1,0 +1,76 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chak De DoMS — Admin</title>
+<style>
+:root{--bg:#f3f6f1;--card:#fff;--ink:#162019;--muted:#6c766e;--line:#dce4dc;--green:#17633f;--soft:#e5f0e8;--red:#c63c32}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,Segoe UI,Arial}button,input,select{font:inherit}.top{height:72px;background:#fff;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;padding:0 22px}.brand{font-weight:950;font-size:17px}.sub{font-size:10px;color:var(--muted)}.btn{border:1px solid var(--line);background:#fff;border-radius:9px;padding:9px 12px;cursor:pointer;text-decoration:none;color:var(--ink);font-size:12px}.green{background:var(--green);border-color:var(--green);color:#fff}.layout{max-width:1550px;margin:auto;padding:18px;display:grid;grid-template-columns:330px minmax(400px,1fr) 350px;gap:17px}.panel,.current,.actions{background:#fff;border:1px solid var(--line);border-radius:15px;box-shadow:0 8px 28px #18281d0a}.head{padding:13px 15px;border-bottom:1px solid #e8ece7;font-size:12px;font-weight:900}.search{padding:11px}.search input{width:100%;padding:11px;border:1px solid var(--line);border-radius:8px;outline:0}.list{max-height:calc(100vh - 155px);overflow:auto;padding:5px}.item{padding:10px;border-radius:9px;cursor:pointer}.item:hover,.item.sel{background:var(--soft)}.item.processed{background:#f8faf8}.item.processed:hover{background:#f1f5f1}.list-status{font-size:9px;font-weight:950;border-radius:999px;padding:4px 7px;white-space:nowrap;letter-spacing:.2px}.sold-badge{background:#dff0e2;color:#17633f}.unsold-badge{background:#fae8e5;color:#b9362e}.available-badge{background:#eef2ee;color:#6c766e}.n{font-size:12px;font-weight:800}.m{font-size:10px;color:var(--muted);margin-top:2px}.center{display:flex;flex-direction:column;gap:13px}.current{min-height:380px;display:flex;align-items:center;justify-content:center;text-align:center;padding:25px}.num{font-size:10px;color:var(--muted);font-weight:900;letter-spacing:1.5px}h1{font-size:38px;margin:8px 0}.role{color:var(--green);font-weight:900;font-size:13px}.status{display:inline-block;margin-top:14px;padding:7px 11px;border-radius:99px;background:var(--soft);color:var(--green);font-size:10px;font-weight:900}.sold{background:#e1f0e2}.unsold{background:#fae8e5;color:var(--red)}.actions{padding:15px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.grid select,.grid input{padding:10px;border:1px solid var(--line);border-radius:8px}.full{grid-column:1/-1}.team{padding:12px 10px;border-bottom:1px solid #edf0eb}.line{display:flex;justify-content:space-between;align-items:center}.purse{font-size:18px;font-weight:950}.bar{height:7px;background:#edf1ed;border-radius:99px;margin:8px 0;overflow:hidden}.fill{height:100%;background:var(--green)}.small{font-size:10px;color:var(--muted)}.history{max-height:230px;overflow:auto;padding:8px 13px}.hist{font-size:10px;padding:8px 0;border-bottom:1px solid #edf0eb}@media(max-width:1050px){.layout{grid-template-columns:280px 1fr}.right{display:none}}@media(max-width:700px){.layout{display:block;padding:10px}.left{margin-bottom:10px}.list{max-height:230px}}
+</style></head><body>
+<header class="top"><div><div class="brand">🏏 CHAK DE DOMS 2026 — ADMIN</div><div class="sub">Supabase live auction control room</div></div><div><a class="btn" href="display.html" target="_blank">Open Display ↗</a> <span id="authStatus" class="sub" style="margin-right:8px">Not logged in</span><button class="btn green" onclick="login()">Admin Login</button> <button class="btn" onclick="logout()">Logout</button></div></header>
+<main class="layout"><section class="panel left"><div class="head">SEARCH PLAYERS</div><div class="search"><input id="q" placeholder="Name, roll, role or program…" oninput="renderPlayers()"></div><div class="list" id="list"></div></section>
+<section class="center"><div class="current" id="current"></div><div class="actions"><div style="font-weight:900;font-size:12px;margin-bottom:10px">AUCTION CONTROL</div><div class="grid"><select id="team"></select><input id="price" type="number" min="0" placeholder="Winning price"><button class="btn green full" onclick="sell()">✓ SOLD</button><button class="btn full" onclick="unsold()">MARK UNSOLD</button><button class="btn full" onclick="nextPlayer()">NEXT PLAYER / CLEAR</button><button class="btn full" onclick="undo()">↶ UNDO LAST TRANSACTION</button></div></div></section>
+<aside class="panel right"><div class="head">LIVE TEAM PURSE</div><div id="teams"></div><div class="head">RECENT AUCTION</div><div class="history" id="history"></div></aside></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+const sb = supabase.createClient(window.SUPABASE_CONFIG.url, window.SUPABASE_CONFIG.publishableKey);
+const esc = s => String(s ?? '').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+const fmt = n => Number(n||0).toLocaleString('en-IN');
+const photoUrl = p => p?.photo_id ? 'https://drive.google.com/thumbnail?id='+encodeURIComponent(p.photo_id)+'&sz=w1400' : '';
+const initials = n => String(n||'').split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase();
+</script>
+<script>
+let players=[],teams=[],state=null,selected=null,sales=[];
+const saleByPlayer=()=>Object.fromEntries(sales.map(x=>[x.player_id,x]));
+async function load(){players=(await sb.from('players').select('*').order('id')).data||[];await refresh();}
+async function refresh(){
+  teams=(await sb.from('teams').select('*').order('id')).data||[];
+  state=(await sb.from('auction_state').select('*').eq('id',1).single()).data;
+  sales=(await sb.from('auction_sales').select('player_id,status,price,team_id').order('id')).data||[];
+  selected=state?.current_player_id?players.findIndex(p=>p.id===state.current_player_id):-1;
+  render();
+}
+function renderPlayers(){
+  let q=document.getElementById('q').value.toLowerCase().trim();
+  let by=saleByPlayer();
+  let a=players.map((p,i)=>({p,i})).filter(x=>!q||Object.values(x.p).join(' ').toLowerCase().includes(q));
+  document.getElementById('list').innerHTML=a.map(x=>{
+    const sale=by[x.p.id];
+    const badge=sale ? (sale.status==='sold' ? `<span class="list-status sold-badge">✓ SOLD${sale.price!=null?' · ₹'+fmt(sale.price):''}</span>` : `<span class="list-status unsold-badge">UNSOLD</span>`) : `<span class="list-status available-badge">AVAILABLE</span>`;
+    return `<div class="item ${selected===x.i?'sel':''} ${sale?'processed':''}" onclick="choose(${x.i})"><div class="line"><div class="n">${esc(x.p.name)}</div>${badge}</div><div class="m">${esc(x.p.program)} · ${esc(x.p.skill)} · ${esc(x.p.gender)} · Exp ${x.p.experience}/5</div></div>`;
+  }).join('');
+}
+function render(){renderPlayers();let p=selected>=0?players[selected]:null,st=state?.stage||'ready';let label=st==='sold'?'SOLD':st==='unsold'?'UNSOLD':st==='on_auction'?'ON AUCTION':'READY';document.getElementById('current').innerHTML=p?`<div><div class="num">PLAYER ${String(selected+1).padStart(2,'0')}</div><h1>${esc(p.name)}</h1><div class="role">${esc(p.program)} · ${esc(p.gender)} · ${esc(p.skill)}</div><div class="status ${st}">${label}${state?.sale_price!=null?' · ₹'+fmt(state.sale_price):''}</div></div>`:`<div><div class="num">AUCTION CONTROL</div><h1>Ready for next player</h1><div class="small">Select a player to put them on the display.</div></div>`;document.getElementById('team').innerHTML=teams.map(t=>`<option value="${t.id}">${esc(t.name)} — ₹${fmt(t.purse)}</option>`).join('');document.getElementById('teams').innerHTML=teams.map(t=>`<div class="team"><div class="line"><b style="font-size:12px">${esc(t.name)}</b><span class="purse">₹${fmt(t.purse)}</span></div><div class="bar"><div class="fill" style="width:${t.start_purse?Math.max(0,t.purse/t.start_purse*100):0}%"></div></div><div class="small">Spent ₹${fmt(t.spent)} · ${teams.find(z=>z.id===t.id)?.squad_count||0} players</div></div>`).join('');document.getElementById('history').innerHTML='';}
+async function choose(i){
+  selected=i;
+  render();
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session){
+    alert('Please click Admin Login first.');
+    return;
+  }
+
+  const playerId=players[i].id;
+  // If this player has already been processed, preserve the permanent result.
+  const {data:existing,error:lookupError}=await sb.from('auction_sales').select('status,price,team_id').eq('player_id',playerId).maybeSingle();
+  if(lookupError){alert('Could not check player status: '+lookupError.message);return;}
+
+  const stage=existing ? (existing.status==='sold'?'sold':'unsold') : 'on_auction';
+  const r=await sb.from('auction_state').update({
+    current_player_id:playerId,
+    stage,
+    winning_team_id:existing?.team_id ?? null,
+    sale_price:existing?.status==='sold' ? existing.price : null,
+    updated_at:new Date().toISOString()
+  }).eq('id',1);
+  if(r.error){alert('Could not update the live display: '+r.error.message);return;}
+  await refresh();
+}
+async function sell(){const {data:{session}}=await sb.auth.getSession();if(!session)return alert('Please login as admin first.');if(selected<0)return alert('Select a player.');let price=+document.getElementById('price').value,tid=+document.getElementById('team').value,t=teams.find(x=>x.id===tid),p=players[selected];if(!t||price<0||price>t.purse)return alert('Invalid price or insufficient purse.');let {data:existing}=await sb.from('auction_sales').select('id').eq('player_id',p.id).maybeSingle();if(existing)return alert('This player already has a recorded result.');let a=await sb.from('auction_sales').insert({player_id:p.id,team_id:tid,price,status:'sold'});if(a.error)return alert(a.error.message);await sb.from('teams').update({purse:t.purse-price,spent:t.spent+price}).eq('id',tid);await sb.from('auction_state').update({current_player_id:p.id,stage:'sold',winning_team_id:tid,sale_price:price,updated_at:new Date().toISOString()}).eq('id',1);document.getElementById('price').value='';await refresh();}
+async function unsold(){const {data:{session}}=await sb.auth.getSession();if(!session)return alert('Please login as admin first.');if(selected<0)return;let p=players[selected];let a=await sb.from('auction_sales').insert({player_id:p.id,team_id:null,price:0,status:'unsold'});if(a.error)return alert(a.error.message);await sb.from('auction_state').update({current_player_id:p.id,stage:'unsold',winning_team_id:null,sale_price:null,updated_at:new Date().toISOString()}).eq('id',1);await refresh();}
+async function nextPlayer(){const {data:{session}}=await sb.auth.getSession();if(!session)return alert('Please login as admin first.');await sb.from('auction_state').update({current_player_id:null,stage:'ready',winning_team_id:null,sale_price:null,updated_at:new Date().toISOString()}).eq('id',1);await refresh();}
+async function undo(){const {data:{session}}=await sb.auth.getSession();if(!session)return alert('Please login as admin first.');let {data:last}=await sb.from('auction_sales').select('*').order('id',{ascending:false}).limit(1).maybeSingle();if(!last)return alert('Nothing to undo.');if(last.team_id){let t=teams.find(x=>x.id===last.team_id);if(t)await sb.from('teams').update({purse:t.purse+last.price,spent:t.spent-last.price}).eq('id',t.id);}await sb.from('auction_sales').delete().eq('id',last.id);await sb.from('auction_state').update({current_player_id:last.player_id,stage:'on_auction',winning_team_id:null,sale_price:null,updated_at:new Date().toISOString()}).eq('id',1);await refresh();}
+async function login(){let email=prompt('Admin email');if(!email)return;let pass=prompt('Admin password');if(!pass)return;let r=await sb.auth.signInWithPassword({email,password:pass});if(r.error)alert(r.error.message);else{document.getElementById('authStatus').textContent='Logged in';render();alert('Logged in. You can now select players and run the auction.');}}
+async function logout(){await sb.auth.signOut();document.getElementById('authStatus').textContent='Not logged in';render();}
+async function updateAuthStatus(){const {data:{session}}=await sb.auth.getSession();document.getElementById('authStatus').textContent=session?'Logged in':'Not logged in';}
+sb.auth.onAuthStateChange(()=>updateAuthStatus());
+sb.channel('auction-live').on('postgres_changes',{event:'*',schema:'public',table:'auction_state'},refresh).on('postgres_changes',{event:'*',schema:'public',table:'teams'},refresh).on('postgres_changes',{event:'*',schema:'public',table:'auction_sales'},refresh).subscribe();
+load(); updateAuthStatus();
+</script></body></html>
